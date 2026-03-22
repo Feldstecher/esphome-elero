@@ -45,6 +45,7 @@ static const uint32_t ELERO_TIMEOUT_MOVEMENT = 120000; // poll for up to two min
 
 static const uint8_t ELERO_SEND_RETRIES = 3;
 static const uint8_t ELERO_SEND_PACKETS = 2;
+static const uint8_t ELERO_MAX_QUEUE_SIZE = 5;
 
 typedef struct {
   uint8_t counter;
@@ -105,7 +106,7 @@ class Elero : public spi::SPIDevice<spi::BIT_ORDER_MSB_FIRST, spi::CLOCK_POLARIT
   void msg_encode(uint8_t* msg);
  
  
-  bool received_{false};
+  volatile bool received_{false};
   uint8_t msg_rx_[CC1101_FIFO_LENGTH];
   uint8_t msg_tx_[CC1101_FIFO_LENGTH];
   uint8_t freq0_{0x7a};
