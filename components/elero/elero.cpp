@@ -189,14 +189,17 @@ bool Elero::wait_tx() {
 
 bool Elero::wait_tx_done() {
   ESP_LOGVV(TAG, "wait_tx_done");
-  uint8_t timeout = 200;
-  
-  //while (((this->read_status(CC1101_TXBYTES) & 0x7f) != 0) && (--timeout != 0)) {
-  while((!this->received_) && (--timeout != 0)) {
+  uint8_t timeout = 100;  // 100 × 200 µs = 20 ms; packet at ~77 kbps takes ~3 ms
+  uint8_t marcstate;
+  do {
+    App.feed_wdt();
     delay_microseconds_safe(200);
-  }
-
-  if(timeout > 0)
+    marcstate = this->read_status(CC1101_MARCSTATE);
+  } while ((marcstate == CC1101_MARCSTATE_TX ||
+            marcstate == CC1101_MARCSTATE_TX_END ||
+            marcstate == CC1101_MARCSTATE_RXTX_SWITCH) &&
+           (--timeout != 0));
+  if (timeout > 0)
     return true;
   ESP_LOGE(TAG, "Timed out waiting for TX Done: 0x%02x", this->read_status(CC1101_MARCSTATE));
   return false;
