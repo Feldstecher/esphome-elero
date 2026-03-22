@@ -60,7 +60,13 @@ void Elero::setup() {
 void Elero::flush_and_rx() {
   ESP_LOGVV(TAG, "flush_and_rx");
   this->write_cmd(CC1101_SIDLE);
-  this->wait_idle();
+  if (!this->wait_idle()) {
+    ESP_LOGE(TAG, "CC1101 stuck at 0x%02x, performing full reset", this->read_status(CC1101_MARCSTATE));
+    this->reset();
+    this->init();
+    this->received_ = false;
+    return;
+  }
   this->write_cmd(CC1101_SFRX);
   this->write_cmd(CC1101_SFTX);
   this->write_cmd(CC1101_SRX);
@@ -238,10 +244,11 @@ bool Elero::transmit() {
 
 uint8_t Elero::read_reg(uint8_t addr) {
   uint8_t data;
-
   this->enable();
   this->write_byte(addr);
   data = this->read_byte();
+  this->disable();
+  delay_microseconds_safe(15);
   return data;
 }
 
