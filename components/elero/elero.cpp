@@ -1,6 +1,7 @@
 #include "elero.h"
 #include "esphome/core/log.h"
 #include "esphome/core/helpers.h"
+#include "esphome/core/application.h"
 #include "esphome/components/elero/cover/EleroCover.h"
 
 namespace esphome {
@@ -149,12 +150,12 @@ void Elero::write_cmd(uint8_t cmd) {
 
 bool Elero::wait_rx() {
   ESP_LOGVV(TAG, "wait_rx");
-  uint8_t timeout = 200;
+  uint8_t timeout = 50;  // 50 × 200 µs = 10 ms (was 40 ms)
   while ((this->read_status(CC1101_MARCSTATE) != CC1101_MARCSTATE_RX) && (--timeout != 0)) {
+    App.feed_wdt();
     delay_microseconds_safe(200);
   }
-  
-  if(timeout > 0)
+  if (timeout > 0)
     return true;
   ESP_LOGE(TAG, "Timed out waiting for RX: 0x%02x", this->read_status(CC1101_MARCSTATE));
   return false;
@@ -162,12 +163,12 @@ bool Elero::wait_rx() {
 
 bool Elero::wait_idle() {
   ESP_LOGVV(TAG, "wait_idle");
-  uint8_t timeout = 200;
+  uint8_t timeout = 50;  // 50 × 200 µs = 10 ms (was 40 ms)
   while ((this->read_status(CC1101_MARCSTATE) != CC1101_MARCSTATE_IDLE) && (--timeout != 0)) {
+    App.feed_wdt();
     delay_microseconds_safe(200);
   }
-  
-  if(timeout > 0)
+  if (timeout > 0)
     return true;
   ESP_LOGE(TAG, "Timed out waiting for Idle: 0x%02x", this->read_status(CC1101_MARCSTATE));
   return false;
@@ -175,13 +176,12 @@ bool Elero::wait_idle() {
 
 bool Elero::wait_tx() {
   ESP_LOGVV(TAG, "wait_tx");
-  uint8_t timeout = 200;
-
+  uint8_t timeout = 50;  // 50 × 200 µs = 10 ms (was 40 ms)
   while ((this->read_status(CC1101_MARCSTATE) != CC1101_MARCSTATE_TX) && (--timeout != 0)) {
+    App.feed_wdt();
     delay_microseconds_safe(200);
   }
-
-  if(timeout > 0)
+  if (timeout > 0)
     return true;
   ESP_LOGE(TAG, "Timed out waiting for TX: 0x%02x", this->read_status(CC1101_MARCSTATE));
   return false;
