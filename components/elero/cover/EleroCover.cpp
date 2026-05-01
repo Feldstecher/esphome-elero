@@ -80,6 +80,8 @@ bool EleroCover::is_at_target() {
 void EleroCover::handle_commands(uint32_t now) {
   if((now - this->last_command_) > ELERO_DELAY_SEND_PACKETS) {
     if(this->commands_to_send_.size() > 0) {
+      if (!this->parent_->can_transmit())
+        return;
       this->command_.payload[4] = this->commands_to_send_.front();
       if(this->parent_->send_command(&this->command_)) {
         this->send_packets_++;
@@ -189,9 +191,12 @@ void EleroCover::control(const cover::CoverCall &call) {
   if (call.get_tilt().has_value()) {
     auto tilt = *call.get_tilt();
     if(tilt > 0) {
-      if (this->commands_to_send_.size() < ELERO_MAX_QUEUE_SIZE)
+      if (this->commands_to_send_.size() < ELERO_MAX_QUEUE_SIZE) {
         this->commands_to_send_.push(this->command_tilt_);
-      this->tilt = 1.0;
+        this->tilt = 1.0;
+      } else {
+        ESP_LOGE(TAG, "Queue full, tilt command dropped for blind 0x%06x", this->command_.blind_addr);
+      }
     } else {
       this->tilt = 0.0;
     }
@@ -211,36 +216,40 @@ void EleroCover::control(const cover::CoverCall &call) {
   }
 }
 
-// FIXME: Most of this should probably be moved to the
-// handle_commands function to only publish a new state
-// if at least the transmission was successful
 void EleroCover::start_movement(CoverOperation dir) {
+  bool queued = false;
   switch(dir) {
     case COVER_OPERATION_OPENING:
-      ESP_LOGV(TAG, "Sending OPEN command");
-      if (this->commands_to_send_.size() < ELERO_MAX_QUEUE_SIZE)
+      if (this->commands_to_send_.size() < ELERO_MAX_QUEUE_SIZE) {
         this->commands_to_send_.push(this->command_up_);
-      // Reset tilt state on movement
-      this->tilt = 0.0;
-      this->last_operation_ = COVER_OPERATION_OPENING;
+        this->tilt = 0.0;
+        this->last_operation_ = COVER_OPERATION_OPENING;
+        queued = true;
+      } else {
+        ESP_LOGE(TAG, "Queue full, open command dropped for blind 0x%06x", this->command_.blind_addr);
+      }
     break;
     case COVER_OPERATION_CLOSING:
-      ESP_LOGV(TAG, "Sending CLOSE command");
-      if (this->commands_to_send_.size() < ELERO_MAX_QUEUE_SIZE)
+      if (this->commands_to_send_.size() < ELERO_MAX_QUEUE_SIZE) {
         this->commands_to_send_.push(this->command_down_);
-      // Reset tilt state on movement
-      this->tilt = 0.0;
-      this->last_operation_ = COVER_OPERATION_CLOSING;
+        this->tilt = 0.0;
+        this->last_operation_ = COVER_OPERATION_CLOSING;
+        queued = true;
+      } else {
+        ESP_LOGE(TAG, "Queue full, close command dropped for blind 0x%06x", this->command_.blind_addr);
+      }
     break;
     case COVER_OPERATION_IDLE:
-      if (this->commands_to_send_.size() < ELERO_MAX_QUEUE_SIZE)
+      if (this->commands_to_send_.size() < ELERO_MAX_QUEUE_SIZE) {
         this->commands_to_send_.push(this->command_stop_);
-      else
+        queued = true;
+      } else {
         ESP_LOGE(TAG, "Queue full, stop command dropped for blind 0x%06x", this->command_.blind_addr);
+      }
     break;
   }
 
-  if(dir == this->current_operation)
+  if (!queued || dir == this->current_operation)
     return;
 
   this->current_operation = dir;

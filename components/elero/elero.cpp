@@ -480,8 +480,13 @@ void Elero::register_cover(EleroCover *cover) {
   cover->set_poll_offset((this->address_to_cover_mapping_.size() - 1) * 5000);
 }
 
+bool Elero::can_transmit() {
+  return (millis() - this->last_global_transmit_) >= ELERO_MIN_TX_GAP;
+}
+
 bool Elero::send_command(t_elero_command *cmd) {
   ESP_LOGVV(TAG, "send_command called");
+  this->last_global_transmit_ = millis();
   uint16_t code = (0x00 - (cmd->counter * 0x708f)) & 0xffff;
   this->msg_tx_[0] = 0x1d; // message length
   this->msg_tx_[1] = cmd->counter; // message counter

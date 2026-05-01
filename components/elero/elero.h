@@ -41,11 +41,12 @@ static const uint8_t ELERO_MAX_PACKET_SIZE = 57; // according to FCC documents
 
 static const uint32_t ELERO_POLL_INTERVAL_MOVING = 2000;  // poll every two seconds while moving
 static const uint32_t ELERO_DELAY_SEND_PACKETS = 50; // 50ms send delay between repeats
+static const uint32_t ELERO_MIN_TX_GAP = 100; // global minimum ms between any two transmissions
 static const uint32_t ELERO_TIMEOUT_MOVEMENT = 120000; // poll for up to two minutes while moving
 
 static const uint8_t ELERO_SEND_RETRIES = 3;
 static const uint8_t ELERO_SEND_PACKETS = 2;
-static const uint8_t ELERO_MAX_QUEUE_SIZE = 5;
+static const uint8_t ELERO_MAX_QUEUE_SIZE = 10;
 
 typedef struct {
   uint8_t counter;
@@ -87,6 +88,7 @@ class Elero : public spi::SPIDevice<spi::BIT_ORDER_MSB_FIRST, spi::CLOCK_POLARIT
   void interpret_msg();
   void register_cover(EleroCover *cover);
   bool send_command(t_elero_command *cmd);
+  bool can_transmit();
   
   void set_gdo0_pin(InternalGPIOPin *pin) { gdo0_pin_ = pin; }
   void set_freq0(uint8_t freq) { freq0_ = freq; }
@@ -107,6 +109,7 @@ class Elero : public spi::SPIDevice<spi::BIT_ORDER_MSB_FIRST, spi::CLOCK_POLARIT
  
  
   volatile bool received_{false};
+  uint32_t last_global_transmit_{0};
   uint8_t msg_rx_[CC1101_FIFO_LENGTH];
   uint8_t msg_tx_[CC1101_FIFO_LENGTH];
   uint8_t freq0_{0x7a};
