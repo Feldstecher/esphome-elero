@@ -415,33 +415,44 @@ void Elero::msg_encode(uint8_t* msg) {
 
 void Elero::interpret_msg() {
   uint8_t length = this->msg_rx_[0];
-  // Sanity check
   if(length > ELERO_MAX_PACKET_SIZE) {
     ESP_LOGE(TAG, "Received invalid packet: too long (%d)", length);
     return;
   }
 
-  uint8_t cnt = this->msg_rx_[1];
-  uint8_t typ = this->msg_rx_[2];
+  uint8_t cnt  = this->msg_rx_[1];
+  uint8_t typ  = this->msg_rx_[2];
   uint8_t typ2 = this->msg_rx_[3];
-  uint8_t hop = this->msg_rx_[4];
+  uint8_t hop  = this->msg_rx_[4];
   uint8_t syst = this->msg_rx_[5];
-  uint8_t chl = this->msg_rx_[6];
-  uint32_t src = ((uint32_t)this->msg_rx_[7] << 16) | ((uint32_t)this->msg_rx_[8] << 8) | (this->msg_rx_[9]);
-  uint32_t bwd = ((uint32_t)this->msg_rx_[10] << 16) | ((uint32_t)this->msg_rx_[11] << 8) | (this->msg_rx_[12]);
-  uint32_t fwd = ((uint32_t)this->msg_rx_[13] << 16) | ((uint32_t)this->msg_rx_[14] << 8) | (this->msg_rx_[15]);
+  uint8_t chl  = this->msg_rx_[6];
+  uint32_t src = ((uint32_t)this->msg_rx_[7] << 16) | ((uint32_t)this->msg_rx_[8] << 8) | this->msg_rx_[9];
+  uint32_t bwd = ((uint32_t)this->msg_rx_[10] << 16) | ((uint32_t)this->msg_rx_[11] << 8) | this->msg_rx_[12];
+  uint32_t fwd = ((uint32_t)this->msg_rx_[13] << 16) | ((uint32_t)this->msg_rx_[14] << 8) | this->msg_rx_[15];
   uint8_t num_dests = this->msg_rx_[16];
+
+  // Skip decode and full log for packets we don't act on — avoids
+  // vsnprintf + UART blocking for every neighbor Elero device on the channel.
+  if((typ != 0xca) && (typ != 0xc9)) {
+    ESP_LOGVV(TAG, "rcv'd non-status: len=%d, typ=0x%02x, src=0x%06x", length, typ, src);
+    return;
+  }
+  auto search = this->address_to_cover_mapping_.find(src);
+  if(search == this->address_to_cover_mapping_.end()) {
+    ESP_LOGV(TAG, "rcv'd status from unknown blind 0x%06x", src);
+    return;
+  }
+
   uint32_t dst;
   uint8_t dests_len;
   if(typ > 0x60) {
-    dests_len = this->msg_rx_[16] * 3;
-    dst = ((uint32_t)this->msg_rx_[17] << 16) | ((uint32_t)this->msg_rx_[18] << 8) | (this->msg_rx_[19]);
+    dests_len = num_dests * 3;
+    dst = ((uint32_t)this->msg_rx_[17] << 16) | ((uint32_t)this->msg_rx_[18] << 8) | this->msg_rx_[19];
   } else {
-    dests_len = this->msg_rx_[16];
+    dests_len = num_dests;
     dst = this->msg_rx_[17];
   }
 
-  // Sanity check
   if(dests_len + 15 > CC1101_FIFO_LENGTH) {
     ESP_LOGE(TAG, "Received invalid packet: dests_len too long (%d)", dests_len);
     return;
@@ -449,8 +460,8 @@ void Elero::interpret_msg() {
 
   uint8_t payload1 = this->msg_rx_[17 + dests_len];
   uint8_t payload2 = this->msg_rx_[18 + dests_len];
-  uint8_t crc = this->msg_rx_[length + 2] >> 7;
-  uint8_t lqi = this->msg_rx_[length + 2] & 0x7f;
+  uint8_t crc  = this->msg_rx_[length + 2] >> 7;
+  uint8_t lqi  = this->msg_rx_[length + 2] & 0x7f;
   float rssi;
   if(this->msg_rx_[length+1] > 127)
     rssi = (float)((this->msg_rx_[length+1]-256)/2-74);
@@ -460,14 +471,7 @@ void Elero::interpret_msg() {
   msg_decode(payload);
   ESP_LOGD(TAG, "rcv'd: len=%02d, cnt=%02d, typ=0x%02x, typ2=0x%02x, hop=0x%02x, syst=0x%02x, chl=%02d, src=0x%06x, bwd=0x%06x, fwd=0x%06x, #dst=%02d, dst=0x%06x, rssi=%2.1f, lqi=%2d, crc=%2d, payload=[0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x]", length, cnt, typ, typ2, hop, syst, chl, src, bwd, fwd, num_dests, dst, rssi, lqi, crc, payload1, payload2, payload[0], payload[1], payload[2], payload[3], payload[4], payload[5], payload[6], payload[7]);
 
-  if((typ == 0xca) || (typ == 0xc9)) { // Status message from a blind
-    // Check if we know the blind
-    // status = payload[6]
-    auto search = this->address_to_cover_mapping_.find(src);
-    if(search != this->address_to_cover_mapping_.end()) {
-      search->second->set_rx_state(payload[6]);
-    }
-  }
+  search->second->set_rx_state(payload[6]);
 }
 
 void Elero::register_cover(EleroCover *cover) {
